@@ -1,0 +1,138 @@
+version: "3.3"
+
+networks:
+  mon:
+    driver: overlay
+    attachable: true
+  numus:
+    external: true
+ 
+volumes:
+    prometheus: {}
+    alertmanager: {}
+
+configs:
+  prometheus_config:
+    file: ./prometheus/conf/prometheus.yml
+  node_rules:
+    file: ./prometheus/rules/swarm_node.rules.yml
+  task_rules:
+    file: ./prometheus/rules/swarm_task.rules.yml
+  telegraf_manager:
+    file: ./telegraf/telegraf_manager/telegraf.conf
+  telegraf_worker:
+    file: ./telegraf/telegraf_worker/telegraf.conf
+
+services:
+  alertmanager:
+    image: prom/alertmanager:latest
+    networks:
+      - mon
+    ports:
+      - "9093:9093"
+    command:
+      - '--config.file=/alertmanager/conf/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - ./alertmanager:/alertmanager
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  unsee:
+    image: cloudflare/unsee:latest
+    networks:
+      - mon
+    ports:
+      - "9094:9094"
+    environment:
+      - "ALERTMANAGER_URI=http://alertmanager:9093"
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  prometheus:
+    image: prom/prometheus:latest
+    networks:
+      - numus
+      - mon
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention=60d'
+    volumes:
+      - prometheus:/prometheus
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+      - source: node_rules
+        target: /etc/prometheus/swarm_node.rules.yml
+      - source: task_rules
+        target: /etc/prometheus/swarm_task.rules.yml
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 2048M
+        reservations:
+          memory: 128M
+
+  telegraf_manager:
+    image: telegraf:latest
+    environment:
+      - HOST_PROC=/host/proc
+      - MY_HOST_NAME="{{.Node.Hostname}}"		# передаем переменной my_host_name имя NODE так как swarm меняет имена на хеш.
+    networks:
+      - mon
+      - numus
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+    configs:
+      - source: telegraf_manager
+        target: /etc/telegraf/telegraf.conf
+    deploy:
+      restart_policy:
+        condition: on-failure
+      mode: global
+      placement:
+        constraints:
+          - node.role == manager
+
+  telegraf_worker:
+    image: telegraf:latest
+    environment:
+      - HOST_PROC=/host/proc
+      - MY_HOST_NAME="{{.Node.Hostname}}"               # передаем переменной my_host_name имя NODE так как swarm меняет имена на хеш.
+    networks:
+      - mon
+      - numus
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+    configs:
+      - source: telegraf_worker
+        target: /etc/telegraf/telegraf.conf
+    deploy:
+      restart_policy:
+        condition: on-failure
+      mode: global
+      placement:
+        constraints:
+          - node.role == worker

@@ -1,0 +1,50 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  
+  external_labels:
+    monitor: 'prom'
+
+rule_files:
+  - "swarm_node.rules.yml"
+  - "swarm_task.rules.yml"
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      - alertmanager:9093
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'transactions_log'
+    dns_sd_configs:
+    - names:
+      - 'tasks.transactions_log'
+      type: 'A'
+      port: 8000
+
+  - job_name: 'telegraf_manager'
+    dns_sd_configs:
+    - names:
+      - 'tasks.telegraf_manager'
+      type: 'A'
+      port: 9273
+
+  - job_name: 'telegraf_worker'
+    dns_sd_configs:
+    - names:
+      - 'tasks.telegraf_worker'
+      type: 'A'
+      port: 9273
+
+
+
+#  - job_name: 'telegraf'
+#    static_configs:
+#      - targets: ['172.16.1.1:9273']
+
+

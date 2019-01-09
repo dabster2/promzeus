@@ -7,4 +7,4 @@ receivers:
     - name: 'rocketchat'
       webhook_configs:
           - send_resolved: false
-            url: 'https://comm.centroit.work/hooks/TRzcXTyNHrZehXLyF/vYBRXutKZdDzxMFeoJ4EbXRg5w3CTXpHiwdR7Esqfzxi3qQ6'
+            url: 'https://rocketchat.com/url-blablabla'
